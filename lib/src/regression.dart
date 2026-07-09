@@ -232,7 +232,13 @@ class RegressionReport {
 
   static String _snip(String output) {
     final flat = output.replaceAll('\n', r'\n');
-    return flat.length <= 80 ? '"$flat"' : '"${flat.substring(0, 77)}…"';
+    if (flat.length <= 80) return '"$flat"';
+    var end = 77;
+    // Never cut between a surrogate pair — a lone surrogate corrupts the
+    // summary (and the RegressionError message carrying it).
+    final last = flat.codeUnitAt(end - 1);
+    if (last >= 0xD800 && last <= 0xDBFF) end--;
+    return '"${flat.substring(0, end)}…"';
   }
 }
 

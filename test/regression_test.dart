@@ -465,6 +465,32 @@ void main() {
   });
 
   group('summary', () {
+    test('truncation never splits an emoji surrogate pair', () {
+      // Audit round 1: cutting at code unit 77 could strand a lone high
+      // surrogate at the end of the snippet. Place an emoji exactly across
+      // the cut: 76 ASCII chars, then 🎉 occupying units 76-77.
+      final tricky = '${'a' * 76}🎉 and plenty of tail text to force a cut';
+      final diff = compareToBaseline(
+        baselineOf([caseOf('a', 'short')]),
+        reportOf([caseOf('a', tricky)]),
+      );
+      final text = diff.summary();
+      for (var i = 0; i < text.length; i++) {
+        final unit = text.codeUnitAt(i);
+        final isHigh = unit >= 0xD800 && unit <= 0xDBFF;
+        if (isHigh) {
+          expect(i + 1, lessThan(text.length), reason: 'lone high surrogate');
+          final next = text.codeUnitAt(i + 1);
+          expect(next >= 0xDC00 && next <= 0xDFFF, isTrue,
+              reason: 'unpaired surrogate at $i');
+          i++;
+        } else {
+          expect(unit >= 0xDC00 && unit <= 0xDFFF, isFalse,
+              reason: 'orphan low surrogate at $i');
+        }
+      }
+    });
+
     test('truncates long outputs and flattens newlines', () {
       final longOut = 'line1\nline2 ${'x' * 200}';
       final diff = compareToBaseline(
