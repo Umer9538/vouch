@@ -1,0 +1,27 @@
+name: vouch
+description: >-
+  Catch silent on-device LLM regressions: freeze a baseline of your eval
+  suite, diff every model swap against it, and gate CI on what changed.
+version: 0.1.0
+repository: https://github.com/Umer9538/vouch
+issue_tracker: https://github.com/Umer9538/vouch/issues
+topics:
+  - llm
+  - testing
+  - regression
+  - ai
+  - on-device
+
+environment:
+  sdk: ^3.11.5
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  llm_replay_eval: ^0.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
