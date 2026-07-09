@@ -22,8 +22,21 @@ class BaselineStore {
   static const JsonEncoder _encoder = JsonEncoder.withIndent('  ');
 
   /// The path a baseline with [name] would occupy.
-  String pathFor(String name) =>
-      '$directory${Platform.pathSeparator}$name$_suffix';
+  ///
+  /// Throws [ArgumentError] if [name] contains a path separator — the
+  /// default file key is the suite name, which the store must never let
+  /// escape [directory] or crash on.
+  String pathFor(String name) {
+    if (name.contains('/') || name.contains('\\')) {
+      throw ArgumentError.value(
+        name,
+        'name',
+        'must not contain a path separator; pass an explicit safe name to '
+            'save/load instead',
+      );
+    }
+    return '$directory${Platform.pathSeparator}$name$_suffix';
+  }
 
   /// Loads the baseline named [name].
   ///
@@ -68,12 +81,24 @@ class BaselineStore {
   ///
   /// The file is keyed by [name] when given, else by the baseline's suite
   /// name — pass a name to keep per-model baselines side by side.
+  ///
+  /// Throws [ArgumentError] if the baseline can't be represented as JSON
+  /// (e.g. a non-JSON value in `ModelInfo.extra`).
   void save(Baseline baseline, {String? name}) {
+    final path = pathFor(name ?? baseline.suiteName);
+    final String encoded;
+    try {
+      encoded = _encoder.convert(baseline.toJson());
+    } on JsonUnsupportedObjectError catch (e) {
+      throw ArgumentError(
+        'Baseline for "${baseline.suiteName}" contains a non-JSON value '
+        '(${e.unsupportedObject.runtimeType}) — ModelInfo.extra may only '
+        'hold JSON-encodable values.',
+      );
+    }
     final dir = Directory(directory);
     if (!dir.existsSync()) dir.createSync(recursive: true);
-    File(
-      pathFor(name ?? baseline.suiteName),
-    ).writeAsStringSync('${_encoder.convert(baseline.toJson())}\n');
+    File(path).writeAsStringSync('$encoded\n');
   }
 
   /// Whether a baseline file for [name] already exists.

@@ -96,4 +96,35 @@ void main() {
     nested.save(sample());
     expect(nested.exists('chat'), isTrue);
   });
+
+  test('a name with a path separator throws instead of escaping the '
+      'directory', () {
+    final baseline = Baseline.fromReport(
+      reportOf([caseOf('a', 'x')], suite: 'chat/v1'),
+      model: model,
+    );
+    expect(() => store.save(baseline), throwsA(isA<ArgumentError>()));
+    expect(() => store.load('../sneaky'), throwsA(isA<ArgumentError>()));
+    // An explicit safe name keeps an awkward suite name usable.
+    store.save(baseline, name: 'chat-v1');
+    expect(store.exists('chat-v1'), isTrue);
+  });
+
+  test('a non-JSON value in ModelInfo.extra fails save with a clear '
+      'ArgumentError, not a raw encoder crash', () {
+    final baseline = Baseline.fromReport(
+      reportOf([caseOf('a', 'x')], suite: 'chat'),
+      model: ModelInfo(id: 'm', extra: {'bad': Object()}),
+    );
+    expect(
+      () => store.save(baseline),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => e.message,
+          'message',
+          contains('extra'),
+        ),
+      ),
+    );
+  });
 }
