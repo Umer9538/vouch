@@ -25,7 +25,10 @@ class BaselineCheck {
   factory BaselineCheck.fromResult(EvalResult result) => BaselineCheck(
     criterion: result.criterion,
     passed: result.passed,
-    score: result.hasScore ? result.score : null,
+    // Non-finite scores (NaN for boolean checks, or garbage like infinity)
+    // freeze as "no score" — they can't be compared and JSON can't carry
+    // them anyway.
+    score: result.hasScore && result.score.isFinite ? result.score : null,
     detail: result.detail,
   );
 

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llm_replay_eval/llm_replay_eval.dart';
 import 'package:vouch/vouch.dart';
@@ -184,6 +186,112 @@ void main() {
       expect(diff.findings, isEmpty);
       expect(diff.stableCount, 1);
     });
+
+    test('a score vanishing on a passing check is drift, not stable', () {
+      // Audit round 1: a 0.9 quality signal disappearing (judge replaced by
+      // a boolean check) was classified stable and the gate passed.
+      final diff = compareToBaseline(
+        baselineOf([judged('a', 0.9)]),
+        reportOf([
+          CaseResult(
+            name: 'a',
+            output: 'same output',
+            results: [const EvalResult(criterion: 'judge', passed: true)],
+          ),
+        ]),
+      );
+      final d = diff.drifted.single.checkDeltas.single;
+      expect(d.baselineScore, 0.9);
+      expect(d.currentScore, isNull);
+      expect(d.scoreDelta, isNull);
+    });
+
+    test('a score appearing on a passing check is drift, not stable', () {
+      final diff = compareToBaseline(
+        baselineOf([
+          CaseResult(
+            name: 'a',
+            output: 'same output',
+            results: [const EvalResult(criterion: 'judge', passed: true)],
+          ),
+        ]),
+        reportOf([judged('a', 0.9)]),
+      );
+      final d = diff.drifted.single.checkDeltas.single;
+      expect(d.baselineScore, isNull);
+      expect(d.currentScore, 0.9);
+    });
+
+    test('a non-finite current score is treated as unscored and the '
+        'agent payload stays JSON-encodable', () {
+      final diff = compareToBaseline(
+        baselineOf([judged('a', 0.9)]),
+        reportOf([judged('a', double.infinity)]),
+      );
+      // Scored -> garbage reads as the score vanishing: drift.
+      final d = diff.drifted.single.checkDeltas.single;
+      expect(d.currentScore, isNull);
+      expect(() => jsonEncode(diff.toJson()), returnsNormally);
+    });
+  });
+
+  group('duplicate criterion names', () {
+    List<EvalResult> twoLens(double a, double b) => [
+      EvalResult(criterion: 'len', passed: true, score: a),
+      EvalResult(criterion: 'len', passed: true, score: b),
+    ];
+
+    test('a byte-identical rerun with duplicate criteria is stable', () {
+      // Audit round 1: first-name-wins pairing fabricated a phantom
+      // 0.2 -> 0.9 drift out of an identical run.
+      final diff = compareToBaseline(
+        baselineOf([
+          CaseResult(name: 'c', output: 'x', results: twoLens(0.2, 0.9)),
+        ]),
+        reportOf([
+          CaseResult(name: 'c', output: 'x', results: twoLens(0.2, 0.9)),
+        ]),
+      );
+      expect(diff.findings, isEmpty);
+      expect(diff.stableCount, 1);
+    });
+
+    test('a real movement in the second duplicate is reported', () {
+      // Audit round 1: the genuine 0.2 -> 0.9 change was silently dropped
+      // because the second current check matched the first baseline check.
+      final diff = compareToBaseline(
+        baselineOf([
+          CaseResult(name: 'c', output: 'x', results: twoLens(0.9, 0.2)),
+        ]),
+        reportOf([
+          CaseResult(name: 'c', output: 'x', results: twoLens(0.9, 0.9)),
+        ]),
+      );
+      final d = diff.drifted.single.checkDeltas.single;
+      expect(d.baselineScore, 0.2);
+      expect(d.currentScore, 0.9);
+      expect(d.scoreDelta, closeTo(0.7, 1e-9));
+    });
+
+    test('a duplicate count mismatch surfaces as a one-sided delta', () {
+      final diff = compareToBaseline(
+        baselineOf([
+          CaseResult(
+            name: 'c',
+            output: 'x',
+            results: [
+              const EvalResult(criterion: 'len', passed: true, score: 0.5),
+            ],
+          ),
+        ]),
+        reportOf([
+          CaseResult(name: 'c', output: 'x', results: twoLens(0.5, 0.8)),
+        ]),
+      );
+      final d = diff.drifted.single.checkDeltas.single;
+      expect(d.baselinePassed, isNull);
+      expect(d.currentScore, 0.8);
+    });
   });
 
   group('suite-shape changes', () {
@@ -218,8 +326,10 @@ void main() {
             passed: true,
             output: 'x',
             checks: const [
-              BaselineCheck(criterion: 'check', passed: true),
-              BaselineCheck(criterion: 'legacy', passed: true),
+              // Mirrors what fromResult freezes for EvalResult.boolean,
+              // which carries score 1.0.
+              BaselineCheck(criterion: 'check', passed: true, score: 1.0),
+              BaselineCheck(criterion: 'legacy', passed: true, score: 1.0),
             ],
           ),
         ],

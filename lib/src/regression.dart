@@ -352,41 +352,68 @@ RegressionKind? _classify(
 }
 
 /// The checks worth reporting for a case present in both runs: any check
-/// whose pass state flipped, whose score moved beyond [tolerance], or that
-/// exists on only one side.
+/// whose pass state flipped, whose score moved beyond [tolerance] or
+/// appeared/disappeared, or that exists on only one side.
+///
+/// Checks are matched by criterion name; when a case has several checks
+/// sharing a name they pair positionally, so a byte-identical rerun never
+/// fabricates drift and a real movement in the second twin is never masked
+/// by the first. Non-finite scores (NaN from boolean checks, or garbage
+/// like infinity) are treated as "no score".
 List<CheckDelta> _deltas(
   BaselineEntry entry,
   CaseResult now,
   double tolerance,
 ) {
-  final deltas = <CheckDelta>[];
-  final seen = <String>{};
-
+  final beforeByName = <String, List<BaselineCheck>>{};
+  for (final c in entry.checks) {
+    beforeByName.putIfAbsent(c.criterion, () => []).add(c);
+  }
+  final nowByName = <String, List<EvalResult>>{};
   for (final r in now.results) {
-    seen.add(r.criterion);
-    final before = entry.checkFor(r.criterion);
-    final currentScore = r.hasScore ? r.score : null;
-    final delta = CheckDelta(
-      criterion: r.criterion,
-      baselinePassed: before?.passed,
-      currentPassed: r.passed,
-      baselineScore: before?.score,
-      currentScore: currentScore,
-      detail: r.detail,
-    );
-    final flipped = before == null || before.passed != r.passed;
-    final scoreMoved =
-        delta.scoreDelta != null && delta.scoreDelta!.abs() > tolerance;
-    if (flipped || scoreMoved) deltas.add(delta);
+    nowByName.putIfAbsent(r.criterion, () => []).add(r);
   }
 
-  for (final before in entry.checks) {
-    if (!seen.contains(before.criterion)) {
+  final deltas = <CheckDelta>[];
+  for (final MapEntry(key: criterion, value: currents) in nowByName.entries) {
+    final befores = beforeByName.remove(criterion) ?? const <BaselineCheck>[];
+    final pairs =
+        currents.length > befores.length ? currents.length : befores.length;
+    for (var i = 0; i < pairs; i++) {
+      final before = i < befores.length ? befores[i] : null;
+      final r = i < currents.length ? currents[i] : null;
+      final baselineScore =
+          before?.score?.isFinite ?? false ? before!.score : null;
+      final currentScore =
+          r != null && r.hasScore && r.score.isFinite ? r.score : null;
+      final delta = CheckDelta(
+        criterion: criterion,
+        baselinePassed: before?.passed,
+        currentPassed: r?.passed,
+        baselineScore: baselineScore,
+        currentScore: currentScore,
+        detail: r?.detail,
+      );
+      final oneSided = before == null || r == null;
+      final flipped = !oneSided && before.passed != r.passed;
+      final scoreMoved =
+          delta.scoreDelta != null && delta.scoreDelta!.abs() > tolerance;
+      // A quality signal appearing or vanishing is a change, not stability.
+      final presenceChanged =
+          !oneSided && (baselineScore == null) != (currentScore == null);
+      if (oneSided || flipped || scoreMoved || presenceChanged) {
+        deltas.add(delta);
+      }
+    }
+  }
+
+  for (final befores in beforeByName.values) {
+    for (final before in befores) {
       deltas.add(
         CheckDelta(
           criterion: before.criterion,
           baselinePassed: before.passed,
-          baselineScore: before.score,
+          baselineScore: before.score?.isFinite ?? false ? before.score : null,
         ),
       );
     }

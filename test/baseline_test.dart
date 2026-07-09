@@ -59,6 +59,26 @@ void main() {
       expect(baseline.entryFor('nan')!.checkFor('c')!.score, isNull);
     });
 
+    test('a non-finite score freezes as no score, keeping the file '
+        'JSON-encodable', () {
+      final report = reportOf([
+        CaseResult(
+          name: 'inf',
+          output: 'x',
+          results: [
+            const EvalResult(
+              criterion: 'c',
+              passed: true,
+              score: double.infinity,
+            ),
+          ],
+        ),
+      ]);
+      final baseline = Baseline.fromReport(report, model: model);
+      expect(baseline.entryFor('inf')!.checkFor('c')!.score, isNull);
+      expect(() => jsonEncode(baseline.toJson()), returnsNormally);
+    });
+
     test('duplicate case names throw ArgumentError', () {
       final report = reportOf([caseOf('dup', 'a'), caseOf('dup', 'b')]);
       expect(
