@@ -244,13 +244,30 @@ class RegressionReport {
 /// `llm_replay_eval`, any byte difference is a real behavior change.
 ///
 /// Throws [ArgumentError] if [current] contains duplicate case names —
-/// silently keeping one of them could hide a regression.
+/// silently keeping one of them could hide a regression — or if the
+/// baseline was recorded for a different suite: diffing unrelated suites
+/// would bucket everything as added/removed and vouch for nothing.
 RegressionReport compareToBaseline(
   Baseline baseline,
   EvalReport current, {
   ModelInfo? currentModel,
   double scoreTolerance = 0.0,
 }) {
+  if (scoreTolerance.isNaN || scoreTolerance < 0) {
+    throw ArgumentError.value(
+      scoreTolerance,
+      'scoreTolerance',
+      'must be a non-negative number',
+    );
+  }
+  if (baseline.suiteName != current.suiteName) {
+    throw ArgumentError(
+      'Baseline is for suite "${baseline.suiteName}" but the report is for '
+      'suite "${current.suiteName}" — comparing across suites would produce '
+      'a meaningless diff. Load the right baseline, or re-record it under '
+      'the new suite name.',
+    );
+  }
   final currentByName = <String, CaseResult>{};
   for (final c in current.cases) {
     if (currentByName.containsKey(c.name)) {

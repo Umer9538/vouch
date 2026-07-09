@@ -386,6 +386,41 @@ void main() {
       );
     });
 
+    test('comparing against a baseline from another suite throws', () {
+      // Audit round 1: a baseline for suite "B" was silently accepted for
+      // suite "A", producing an all-added/all-removed nonsense diff.
+      final base = Baseline.fromReport(
+        reportOf([caseOf('a', 'x')], suite: 'chat-v1'),
+        model: gemma3,
+      );
+      expect(
+        () => compareToBaseline(base, reportOf([caseOf('a', 'x')])),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message,
+            'message',
+            contains('chat-v1'),
+          ),
+        ),
+      );
+    });
+
+    test('a negative or NaN scoreTolerance throws instead of fabricating '
+        'phantom drift', () {
+      final base = baselineOf([caseOf('a', 'x')]);
+      for (final bad in [-0.1, double.nan]) {
+        expect(
+          () => compareToBaseline(
+            base,
+            reportOf([caseOf('a', 'x')]),
+            scoreTolerance: bad,
+          ),
+          throwsA(isA<ArgumentError>()),
+          reason: 'tolerance: $bad',
+        );
+      }
+    });
+
     test('duplicate case names in the current report throw', () {
       expect(
         () => compareToBaseline(
