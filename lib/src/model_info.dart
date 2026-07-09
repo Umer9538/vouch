@@ -21,13 +21,24 @@ class ModelInfo {
         'ModelInfo JSON must have a non-empty string "id" field.',
       );
     }
+    final version = json['version'];
+    final quantization = json['quantization'];
+    final runtime = json['runtime'];
     final extra = json['extra'];
+    if (version is! String? || quantization is! String? || runtime is! String?) {
+      throw FormatException(
+        'ModelInfo "$id" has a non-string version/quantization/runtime.',
+      );
+    }
+    if (extra is! Map<String, Object?>?) {
+      throw FormatException('ModelInfo "$id" has a non-object "extra".');
+    }
     return ModelInfo(
       id: id,
-      version: json['version'] as String?,
-      quantization: json['quantization'] as String?,
-      runtime: json['runtime'] as String?,
-      extra: extra is Map<String, Object?> ? extra : const {},
+      version: version,
+      quantization: quantization,
+      runtime: runtime,
+      extra: extra ?? const {},
     );
   }
 

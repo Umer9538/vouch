@@ -46,7 +46,16 @@ class BaselineStore {
   Baseline? loadOrNull(String name) {
     final file = File(pathFor(name));
     if (!file.existsSync()) return null;
-    final decoded = jsonDecode(file.readAsStringSync());
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(file.readAsStringSync());
+    } on FormatException catch (e) {
+      // Truncated write, merge-conflict markers, plain corruption — surface
+      // it as the documented exception type instead of a raw parse error.
+      throw BaselineFormatException(
+        'Baseline file ${file.path} is not valid JSON: ${e.message}',
+      );
+    }
     if (decoded is! Map<String, Object?>) {
       throw BaselineFormatException(
         'Baseline file ${file.path} is not a JSON object.',

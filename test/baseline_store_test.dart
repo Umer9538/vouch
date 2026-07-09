@@ -75,6 +75,22 @@ void main() {
     );
   });
 
+  test('unparsable file content throws BaselineFormatException, '
+      'not a raw FormatException', () {
+    for (final content in [
+      '', // truncated to nothing
+      '{"formatVersion": 1} trailing garbage',
+      '<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> theirs', // merge conflict
+    ]) {
+      File(store.pathFor('corrupt')).writeAsStringSync(content);
+      expect(
+        () => store.load('corrupt'),
+        throwsA(isA<BaselineFormatException>()),
+        reason: 'content: $content',
+      );
+    }
+  });
+
   test('save creates the directory when absent', () {
     final nested = BaselineStore('${tmp.path}/a/b');
     nested.save(sample());

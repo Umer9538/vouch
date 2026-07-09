@@ -62,5 +62,20 @@ void main() {
     test('empty id throws FormatException', () {
       expect(() => ModelInfo.fromJson(const {'id': ''}), throwsFormatException);
     });
+
+    test('wrong-typed optional fields throw FormatException', () {
+      expect(
+        () => ModelInfo.fromJson(const {'id': 'm', 'version': 3}),
+        throwsFormatException,
+      );
+      expect(
+        () => ModelInfo.fromJson(const {'id': 'm', 'runtime': true}),
+        throwsFormatException,
+      );
+      expect(
+        () => ModelInfo.fromJson(const {'id': 'm', 'extra': 'nope'}),
+        throwsFormatException,
+      );
+    });
   });
 }

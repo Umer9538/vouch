@@ -146,6 +146,145 @@ void main() {
       );
     });
 
+    test('createdAt is serialized in UTC and preserves the instant', () {
+      final local = DateTime(2026, 7, 10, 17, 30); // local wall-clock time
+      final baseline = Baseline.fromReport(
+        reportOf([caseOf('a', 'x')]),
+        model: model,
+        createdAt: local,
+      );
+      final wire = baseline.toJson()['createdAt'] as String;
+      expect(wire, endsWith('Z'));
+      final back = Baseline.fromJson(
+        jsonDecode(jsonEncode(baseline.toJson())) as Map<String, Object?>,
+      );
+      expect(back.createdAt.isAtSameMomentAs(local), isTrue);
+    });
+
+    test('a non-object item in "entries" throws instead of being skipped', () {
+      // Silently dropping a corrupt entry would shrink coverage and let a
+      // vanished case pass the gate as CLEAN.
+      expect(
+        () => Baseline.fromJson(const {
+          'formatVersion': 1,
+          'suite': 's',
+          'model': {'id': 'm'},
+          'createdAt': '2026-07-10T00:00:00.000Z',
+          'entries': [42],
+        }),
+        throwsA(isA<BaselineFormatException>()),
+      );
+    });
+
+    test('non-list "checks" throws instead of being treated as empty', () {
+      expect(
+        () => Baseline.fromJson(const {
+          'formatVersion': 1,
+          'suite': 's',
+          'model': {'id': 'm'},
+          'createdAt': '2026-07-10T00:00:00.000Z',
+          'entries': [
+            {'name': 'a', 'passed': true, 'output': 'x', 'checks': 'oops'},
+          ],
+        }),
+        throwsA(isA<BaselineFormatException>()),
+      );
+    });
+
+    test('a non-object item in "checks" throws instead of being skipped', () {
+      expect(
+        () => Baseline.fromJson(const {
+          'formatVersion': 1,
+          'suite': 's',
+          'model': {'id': 'm'},
+          'createdAt': '2026-07-10T00:00:00.000Z',
+          'entries': [
+            {
+              'name': 'a',
+              'passed': true,
+              'output': 'x',
+              'checks': [null],
+            },
+          ],
+        }),
+        throwsA(isA<BaselineFormatException>()),
+      );
+    });
+
+    test('a non-numeric check score throws BaselineFormatException', () {
+      expect(
+        () => Baseline.fromJson(const {
+          'formatVersion': 1,
+          'suite': 's',
+          'model': {'id': 'm'},
+          'createdAt': '2026-07-10T00:00:00.000Z',
+          'entries': [
+            {
+              'name': 'a',
+              'passed': true,
+              'output': 'x',
+              'checks': [
+                {'criterion': 'c', 'passed': true, 'score': 'high'},
+              ],
+            },
+          ],
+        }),
+        throwsA(isA<BaselineFormatException>()),
+      );
+    });
+
+    test('a non-string check detail throws BaselineFormatException', () {
+      expect(
+        () => Baseline.fromJson(const {
+          'formatVersion': 1,
+          'suite': 's',
+          'model': {'id': 'm'},
+          'createdAt': '2026-07-10T00:00:00.000Z',
+          'entries': [
+            {
+              'name': 'a',
+              'passed': true,
+              'output': 'x',
+              'checks': [
+                {'criterion': 'c', 'passed': true, 'detail': 7},
+              ],
+            },
+          ],
+        }),
+        throwsA(isA<BaselineFormatException>()),
+      );
+    });
+
+    test('duplicate entry names in a document throw '
+        'BaselineFormatException, not ArgumentError', () {
+      expect(
+        () => Baseline.fromJson(const {
+          'formatVersion': 1,
+          'suite': 's',
+          'model': {'id': 'm'},
+          'createdAt': '2026-07-10T00:00:00.000Z',
+          'entries': [
+            {'name': 'dup', 'passed': true, 'output': 'a', 'checks': []},
+            {'name': 'dup', 'passed': true, 'output': 'b', 'checks': []},
+          ],
+        }),
+        throwsA(isA<BaselineFormatException>()),
+      );
+    });
+
+    test('wrong-typed model fields surface as BaselineFormatException', () {
+      expect(
+        () => Baseline.fromJson(const {
+          'formatVersion': 1,
+          'suite': 's',
+          'model': {'id': 'm', 'version': 3},
+          'createdAt': '2026-07-10T00:00:00.000Z',
+          'entries': [],
+        }),
+        throwsA(isA<BaselineFormatException>()),
+      );
+    });
+
     test('malformed entry throws BaselineFormatException', () {
       expect(
         () => Baseline.fromJson(const {

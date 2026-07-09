@@ -32,16 +32,28 @@ class BaselineCheck {
   factory BaselineCheck.fromJson(Map<String, Object?> json) {
     final criterion = json['criterion'];
     final passed = json['passed'];
+    final score = json['score'];
+    final detail = json['detail'];
     if (criterion is! String || passed is! bool) {
       throw BaselineFormatException(
         'Baseline check must have a string "criterion" and bool "passed".',
       );
     }
+    if (score is! num?) {
+      throw BaselineFormatException(
+        'Baseline check "$criterion" has a non-numeric "score".',
+      );
+    }
+    if (detail is! String?) {
+      throw BaselineFormatException(
+        'Baseline check "$criterion" has a non-string "detail".',
+      );
+    }
     return BaselineCheck(
       criterion: criterion,
       passed: passed,
-      score: (json['score'] as num?)?.toDouble(),
-      detail: json['detail'] as String?,
+      score: score?.toDouble(),
+      detail: detail,
     );
   }
 
@@ -88,14 +100,25 @@ class BaselineEntry {
         'string "output".',
       );
     }
+    // A corrupt check is never skipped: dropping one would change what this
+    // entry vouches for without anyone noticing.
+    if (checks is! List) {
+      throw BaselineFormatException(
+        'Baseline entry "$name" must have a list of "checks".',
+      );
+    }
     return BaselineEntry(
       name: name,
       passed: passed,
       output: output,
       checks: [
-        if (checks is List)
-          for (final c in checks)
-            if (c is Map<String, Object?>) BaselineCheck.fromJson(c),
+        for (final c in checks)
+          if (c is Map<String, Object?>)
+            BaselineCheck.fromJson(c)
+          else
+            throw BaselineFormatException(
+              'Baseline entry "$name" contains a non-object check.',
+            ),
       ],
     );
   }
@@ -190,13 +213,23 @@ class Baseline {
         suiteName: suite,
         model: ModelInfo.fromJson(model),
         createdAt: DateTime.parse(createdAt),
+        // A corrupt entry is never skipped: silently dropping one would
+        // shrink coverage and let a vanished case pass the gate as CLEAN.
         entries: [
           for (final e in entries)
-            if (e is Map<String, Object?>) BaselineEntry.fromJson(e),
+            if (e is Map<String, Object?>)
+              BaselineEntry.fromJson(e)
+            else
+              throw BaselineFormatException(
+                'Baseline "entries" contains a non-object item.',
+              ),
         ],
       );
     } on FormatException catch (e) {
       throw BaselineFormatException(e.message);
+    } on ArgumentError catch (e) {
+      // e.g. duplicate case names inside the document.
+      throw BaselineFormatException(e.message.toString());
     }
   }
 
@@ -220,7 +253,8 @@ class Baseline {
     'formatVersion': formatVersion,
     'suite': suiteName,
     'model': model.toJson(),
-    'createdAt': createdAt.toIso8601String(),
+    // Always UTC, so the recorded instant is unambiguous across machines.
+    'createdAt': createdAt.toUtc().toIso8601String(),
     'entries': [for (final e in entries) e.toJson()],
   };
 }
