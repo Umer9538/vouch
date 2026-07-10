@@ -51,10 +51,9 @@ class CheckDelta {
   final String? detail;
 
   /// Score movement (current − baseline) when both sides have a score.
-  double? get scoreDelta =>
-      baselineScore == null || currentScore == null
-          ? null
-          : currentScore! - baselineScore!;
+  double? get scoreDelta => baselineScore == null || currentScore == null
+      ? null
+      : currentScore! - baselineScore!;
 
   Map<String, Object?> toJson() => {
     'criterion': criterion,
@@ -93,10 +92,9 @@ class RegressionFinding {
   final List<CheckDelta> checkDeltas;
 
   /// Whether the raw model output changed (null for one-sided cases).
-  bool? get outputChanged =>
-      baselineOutput == null || currentOutput == null
-          ? null
-          : baselineOutput != currentOutput;
+  bool? get outputChanged => baselineOutput == null || currentOutput == null
+      ? null
+      : baselineOutput != currentOutput;
 
   Map<String, Object?> toJson() => {
     'kind': kind.name,
@@ -139,8 +137,10 @@ class RegressionReport {
   final int stableCount;
 
   /// The findings of one [kind].
-  List<RegressionFinding> ofKind(RegressionKind kind) =>
-      [for (final f in findings) if (f.kind == kind) f];
+  List<RegressionFinding> ofKind(RegressionKind kind) => [
+    for (final f in findings)
+      if (f.kind == kind) f,
+  ];
 
   List<RegressionFinding> get regressed => ofKind(RegressionKind.regressed);
   List<RegressionFinding> get removed => ofKind(RegressionKind.removed);
@@ -151,8 +151,10 @@ class RegressionReport {
   List<RegressionFinding> get fixed => ofKind(RegressionKind.fixed);
 
   /// Added cases that fail — new work the baseline can't vouch for.
-  List<RegressionFinding> get addedFailing =>
-      [for (final f in added) if (f.currentPassed == false) f];
+  List<RegressionFinding> get addedFailing => [
+    for (final f in added)
+      if (f.currentPassed == false) f,
+  ];
 
   /// True when at least one baseline-passing case now fails.
   bool get hasRegressions => regressed.isNotEmpty;
@@ -192,7 +194,9 @@ class RegressionReport {
         '(${baselineCreatedAt.toIso8601String().split('T').first}) — $status',
       );
     if (modelChanged) {
-      buffer.writeln('  model: ${baselineModel.label} → ${currentModel!.label}');
+      buffer.writeln(
+        '  model: ${baselineModel.label} → ${currentModel!.label}',
+      );
     }
     final counts = [
       for (final kind in RegressionKind.values)
@@ -201,25 +205,30 @@ class RegressionReport {
     ];
     buffer.writeln('  ${counts.join(' · ')}');
     for (final f in findings) {
-      buffer.writeln('  ${_mark(f.kind)} ${_label(f.kind).toUpperCase()} '
-          '${f.caseName}');
+      buffer.writeln(
+        '  ${_mark(f.kind)} ${_label(f.kind).toUpperCase()} '
+        '${f.caseName}',
+      );
       for (final d in f.checkDeltas) {
         // Say why whenever any score information moved — including a score
         // appearing or vanishing, which would otherwise render as an
         // information-free "PASS → PASS".
-        final scoreNote =
-            d.baselineScore == d.currentScore
-                ? ''
-                : ' (score ${_score(d.baselineScore)}'
-                    ' → ${_score(d.currentScore)})';
-        buffer.writeln('      ${d.criterion}: ${_verdict(d.baselinePassed)}'
-            ' → ${_verdict(d.currentPassed)}'
-            '$scoreNote'
-            '${d.detail == null ? '' : ' — ${d.detail}'}');
+        final scoreNote = d.baselineScore == d.currentScore
+            ? ''
+            : ' (score ${_score(d.baselineScore)}'
+                  ' → ${_score(d.currentScore)})';
+        buffer.writeln(
+          '      ${d.criterion}: ${_verdict(d.baselinePassed)}'
+          ' → ${_verdict(d.currentPassed)}'
+          '$scoreNote'
+          '${d.detail == null ? '' : ' — ${d.detail}'}',
+        );
       }
       if (f.outputChanged == true) {
-        buffer.writeln('      output: ${_snip(f.baselineOutput!)} '
-            '→ ${_snip(f.currentOutput!)}');
+        buffer.writeln(
+          '      output: ${_snip(f.baselineOutput!)} '
+          '→ ${_snip(f.currentOutput!)}',
+        );
       }
     }
     return buffer.toString().trimRight();
@@ -243,8 +252,7 @@ class RegressionReport {
   static String _verdict(bool? passed) =>
       passed == null ? '—' : (passed ? 'PASS' : 'FAIL');
 
-  static String _score(double? score) =>
-      score?.toStringAsFixed(2) ?? 'none';
+  static String _score(double? score) => score?.toStringAsFixed(2) ?? 'none';
 
   static String _snip(String output) {
     final flat = output.replaceAll('\n', r'\n');
@@ -423,8 +431,8 @@ List<CheckDelta> _deltas(
 
   final deltas = <CheckDelta>[];
   for (final MapEntry(key: criterion, value: currents) in nowByName.entries) {
-    final befores =
-        (beforeByName.remove(criterion) ?? const <BaselineCheck>[]).toList();
+    final befores = (beforeByName.remove(criterion) ?? const <BaselineCheck>[])
+        .toList();
     // Consume exact matches (same verdict, same score) first, so same-named
     // twins that merely reordered never fabricate deltas, and a surviving
     // unchanged twin is never blamed for its sibling's change.
@@ -441,15 +449,18 @@ List<CheckDelta> _deltas(
         leftovers.add(r);
       }
     }
-    final pairs =
-        leftovers.length > befores.length ? leftovers.length : befores.length;
+    final pairs = leftovers.length > befores.length
+        ? leftovers.length
+        : befores.length;
     for (var i = 0; i < pairs; i++) {
       final before = i < befores.length ? befores[i] : null;
       final r = i < leftovers.length ? leftovers[i] : null;
-      final baselineScore =
-          before?.score?.isFinite ?? false ? before!.score : null;
-      final currentScore =
-          r != null && r.hasScore && r.score.isFinite ? r.score : null;
+      final baselineScore = before?.score?.isFinite ?? false
+          ? before!.score
+          : null;
+      final currentScore = r != null && r.hasScore && r.score.isFinite
+          ? r.score
+          : null;
       final delta = CheckDelta(
         criterion: criterion,
         baselinePassed: before?.passed,

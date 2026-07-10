@@ -10,9 +10,11 @@ void main() {
   const gemma3 = ModelInfo(id: 'gemma-3-1b-it', quantization: 'q4');
   const gemma3n = ModelInfo(id: 'gemma-3n-e2b', quantization: 'q4');
 
-  Baseline baselineOf(List<CaseResult> cases) =>
-      Baseline.fromReport(reportOf(cases), model: gemma3,
-          createdAt: DateTime.utc(2026, 7, 8));
+  Baseline baselineOf(List<CaseResult> cases) => Baseline.fromReport(
+    reportOf(cases),
+    model: gemma3,
+    createdAt: DateTime.utc(2026, 7, 8),
+  );
 
   CaseResult judgedCase(String name, double score) => CaseResult(
     name: name,
@@ -158,9 +160,7 @@ void main() {
     CaseResult judged(String name, double score) => CaseResult(
       name: name,
       output: 'same output',
-      results: [
-        EvalResult(criterion: 'judge', passed: true, score: score),
-      ],
+      results: [EvalResult(criterion: 'judge', passed: true, score: score)],
     );
 
     test('score movement beyond tolerance is drift with a delta', () {
@@ -463,10 +463,16 @@ void main() {
   group('report metadata', () {
     test('modelChanged reflects the declared current model', () {
       final base = baselineOf([caseOf('a', 'x')]);
-      final same = compareToBaseline(base, reportOf([caseOf('a', 'x')]),
-          currentModel: gemma3);
-      final changed = compareToBaseline(base, reportOf([caseOf('a', 'x')]),
-          currentModel: gemma3n);
+      final same = compareToBaseline(
+        base,
+        reportOf([caseOf('a', 'x')]),
+        currentModel: gemma3,
+      );
+      final changed = compareToBaseline(
+        base,
+        reportOf([caseOf('a', 'x')]),
+        currentModel: gemma3n,
+      );
       final undeclared = compareToBaseline(base, reportOf([caseOf('a', 'x')]));
 
       expect(same.modelChanged, isFalse);
@@ -614,12 +620,18 @@ void main() {
         if (isHigh) {
           expect(i + 1, lessThan(text.length), reason: 'lone high surrogate');
           final next = text.codeUnitAt(i + 1);
-          expect(next >= 0xDC00 && next <= 0xDFFF, isTrue,
-              reason: 'unpaired surrogate at $i');
+          expect(
+            next >= 0xDC00 && next <= 0xDFFF,
+            isTrue,
+            reason: 'unpaired surrogate at $i',
+          );
           i++;
         } else {
-          expect(unit >= 0xDC00 && unit <= 0xDFFF, isFalse,
-              reason: 'orphan low surrogate at $i');
+          expect(
+            unit >= 0xDC00 && unit <= 0xDFFF,
+            isFalse,
+            reason: 'orphan low surrogate at $i',
+          );
         }
       }
     });

@@ -180,9 +180,7 @@ class Baseline {
     suiteName: report.suiteName,
     model: model,
     createdAt: createdAt ?? DateTime.now(),
-    entries: [
-      for (final c in report.cases) BaselineEntry.fromCaseResult(c),
-    ],
+    entries: [for (final c in report.cases) BaselineEntry.fromCaseResult(c)],
   );
 
   /// Parses the JSON produced by [toJson].

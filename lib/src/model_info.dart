@@ -25,7 +25,9 @@ class ModelInfo {
     final quantization = json['quantization'];
     final runtime = json['runtime'];
     final extra = json['extra'];
-    if (version is! String? || quantization is! String? || runtime is! String?) {
+    if (version is! String? ||
+        quantization is! String? ||
+        runtime is! String?) {
       throw FormatException(
         'ModelInfo "$id" has a non-string version/quantization/runtime.',
       );
