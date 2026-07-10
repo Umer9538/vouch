@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "name": "support-bot-v2",
+  "interactions": [
+    {
+      "key": "3cf6cc7ef31d894ea1fd3d9c409d58f75495ddb2b6388472caeff78c04c6fc70",
+      "request": {
+        "prompt": "What is the refund policy? Answer as JSON."
+      },
+      "response": {
+        "kind": "oneShot",
+        "chunks": [
+          {
+            "text": "Sure! Our refund policy lasts 30 days and needs a receipt."
+          }
+        ]
+      }
+    },
+    {
+      "key": "aadbc6c287f5c7951198b2b4dd6bf78b69e831b19ccfc198243f4463e86befbe",
+      "request": {
+        "prompt": "Greet the user."
+      },
+      "response": {
+        "kind": "oneShot",
+        "chunks": [
+          {
+            "text": "Hi there! How can I help you today?"
+          }
+        ]
+      }
+    },
+    {
+      "key": "93b83a3b6d80384eb915d3a397f5f4bf18a93fd1b6ab742663540678fd0a1967",
+      "request": {
+        "prompt": "Summarize order #123 status."
+      },
+      "response": {
+        "kind": "oneShot",
+        "chunks": [
+          {
+            "text": "Order #123 shipped yesterday and arrives tomorrow."
+          }
+        ]
+      }
+    }
+  ]
+}

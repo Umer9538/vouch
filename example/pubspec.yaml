@@ -1,0 +1,19 @@
+name: vouch_example
+description: Demonstrates vouch catching a silent on-device model regression.
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  llm_replay_eval: ^0.1.0
+  vouch:
+    path: ../
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

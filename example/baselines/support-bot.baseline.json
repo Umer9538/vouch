@@ -1,0 +1,58 @@
+{
+  "formatVersion": 1,
+  "suite": "support-bot",
+  "model": {
+    "id": "fake-slm",
+    "version": "1",
+    "quantization": "q4"
+  },
+  "createdAt": "2026-07-10T00:00:00.000Z",
+  "entries": [
+    {
+      "name": "refund-policy",
+      "passed": true,
+      "output": "{\"refundDays\": 30, \"requiresReceipt\": true}",
+      "checks": [
+        {
+          "criterion": "is valid JSON",
+          "passed": true,
+          "score": 1.0
+        },
+        {
+          "criterion": "JSON has keys refundDays, requiresReceipt",
+          "passed": true,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "greeting",
+      "passed": true,
+      "output": "Hello! How can I help you today?",
+      "checks": [
+        {
+          "criterion": "contains \"help\"",
+          "passed": true,
+          "score": 1.0
+        },
+        {
+          "criterion": "length <= 80 chars",
+          "passed": true,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "order-status",
+      "passed": true,
+      "output": "Order #123 shipped yesterday and arrives tomorrow.",
+      "checks": [
+        {
+          "criterion": "contains \"order\"",
+          "passed": true,
+          "score": 1.0
+        }
+      ]
+    }
+  ]
+}
