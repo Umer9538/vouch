@@ -59,14 +59,17 @@ class BaselineStore {
   Baseline? loadOrNull(String name) {
     final file = File(pathFor(name));
     if (!file.existsSync()) return null;
+    // Read bytes first so genuine IO errors stay IO errors, then decode
+    // UTF-8 and JSON explicitly so ANY corruption — invalid bytes,
+    // truncated writes, merge-conflict markers — surfaces as the
+    // documented exception type.
+    final bytes = file.readAsBytesSync();
     final Object? decoded;
     try {
-      decoded = jsonDecode(file.readAsStringSync());
+      decoded = jsonDecode(utf8.decode(bytes));
     } on FormatException catch (e) {
-      // Truncated write, merge-conflict markers, plain corruption — surface
-      // it as the documented exception type instead of a raw parse error.
       throw BaselineFormatException(
-        'Baseline file ${file.path} is not valid JSON: ${e.message}',
+        'Baseline file ${file.path} is not valid UTF-8 JSON: ${e.message}',
       );
     }
     if (decoded is! Map<String, Object?>) {

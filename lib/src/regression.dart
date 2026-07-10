@@ -16,7 +16,9 @@ enum RegressionKind {
   /// evaluated against it changed.
   drifted,
 
-  /// Failed in both runs.
+  /// Failed in both runs, with a changed output or checks. An unchanged
+  /// known failure is counted stable — a byte-identical rerun never
+  /// produces findings.
   stillFailing,
 
   /// New case, absent from the baseline.
@@ -60,7 +62,9 @@ class CheckDelta {
     if (currentPassed != null) 'currentPassed': currentPassed,
     if (baselineScore != null) 'baselineScore': baselineScore,
     if (currentScore != null) 'currentScore': currentScore,
-    if (scoreDelta != null) 'scoreDelta': scoreDelta,
+    // Two finite scores can still overflow to ±infinity when subtracted;
+    // JSON can't carry that, and both operands are present anyway.
+    if (scoreDelta != null && scoreDelta!.isFinite) 'scoreDelta': scoreDelta,
     if (detail != null) 'detail': detail,
   };
 }
@@ -130,7 +134,8 @@ class RegressionReport {
   /// drifted, still failing, added, fixed.
   final List<RegressionFinding> findings;
 
-  /// Cases that passed in both runs with identical output and steady scores.
+  /// Cases whose outcome didn't move — same output, same verdicts, steady
+  /// scores — whether passing or (known-)failing in both runs.
   final int stableCount;
 
   /// The findings of one [kind].
@@ -199,9 +204,17 @@ class RegressionReport {
       buffer.writeln('  ${_mark(f.kind)} ${_label(f.kind).toUpperCase()} '
           '${f.caseName}');
       for (final d in f.checkDeltas) {
+        // Say why whenever any score information moved — including a score
+        // appearing or vanishing, which would otherwise render as an
+        // information-free "PASS → PASS".
+        final scoreNote =
+            d.baselineScore == d.currentScore
+                ? ''
+                : ' (score ${_score(d.baselineScore)}'
+                    ' → ${_score(d.currentScore)})';
         buffer.writeln('      ${d.criterion}: ${_verdict(d.baselinePassed)}'
             ' → ${_verdict(d.currentPassed)}'
-            '${d.scoreDelta == null ? '' : ' (score ${d.baselineScore!.toStringAsFixed(2)} → ${d.currentScore!.toStringAsFixed(2)})'}'
+            '$scoreNote'
             '${d.detail == null ? '' : ' — ${d.detail}'}');
       }
       if (f.outputChanged == true) {
@@ -229,6 +242,9 @@ class RegressionReport {
 
   static String _verdict(bool? passed) =>
       passed == null ? '—' : (passed ? 'PASS' : 'FAIL');
+
+  static String _score(double? score) =>
+      score?.toStringAsFixed(2) ?? 'none';
 
   static String _snip(String output) {
     final flat = output.replaceAll('\n', r'\n');
@@ -336,7 +352,9 @@ RegressionReport compareToBaseline(
               CheckDelta(
                 criterion: r.criterion,
                 currentPassed: r.passed,
-                currentScore: r.hasScore ? r.score : null,
+                // Same non-finite policy as everywhere else — the agent
+                // payload must always be JSON-encodable.
+                currentScore: r.hasScore && r.score.isFinite ? r.score : null,
                 detail: r.detail,
               ),
         ],
@@ -365,7 +383,13 @@ RegressionKind? _classify(
 ) {
   if (entry.passed && !now.passed) return RegressionKind.regressed;
   if (!entry.passed && now.passed) return RegressionKind.fixed;
-  if (!entry.passed && !now.passed) return RegressionKind.stillFailing;
+  if (!entry.passed && !now.passed) {
+    // An unchanged known failure is no movement: a byte-identical rerun
+    // must be fully stable even when the baseline froze failing cases.
+    return entry.output != now.output || deltas.isNotEmpty
+        ? RegressionKind.stillFailing
+        : null;
+  }
   // Both passed: drift when the output moved or any score moved beyond
   // tolerance.
   if (entry.output != now.output || deltas.isNotEmpty) {
@@ -399,12 +423,29 @@ List<CheckDelta> _deltas(
 
   final deltas = <CheckDelta>[];
   for (final MapEntry(key: criterion, value: currents) in nowByName.entries) {
-    final befores = beforeByName.remove(criterion) ?? const <BaselineCheck>[];
+    final befores =
+        (beforeByName.remove(criterion) ?? const <BaselineCheck>[]).toList();
+    // Consume exact matches (same verdict, same score) first, so same-named
+    // twins that merely reordered never fabricate deltas, and a surviving
+    // unchanged twin is never blamed for its sibling's change.
+    final leftovers = <EvalResult>[];
+    for (final r in currents) {
+      final score = r.hasScore && r.score.isFinite ? r.score : null;
+      final match = befores.indexWhere((b) {
+        final bScore = (b.score?.isFinite ?? false) ? b.score : null;
+        return b.passed == r.passed && bScore == score;
+      });
+      if (match >= 0) {
+        befores.removeAt(match);
+      } else {
+        leftovers.add(r);
+      }
+    }
     final pairs =
-        currents.length > befores.length ? currents.length : befores.length;
+        leftovers.length > befores.length ? leftovers.length : befores.length;
     for (var i = 0; i < pairs; i++) {
       final before = i < befores.length ? befores[i] : null;
-      final r = i < currents.length ? currents[i] : null;
+      final r = i < leftovers.length ? leftovers[i] : null;
       final baselineScore =
           before?.score?.isFinite ?? false ? before!.score : null;
       final currentScore =

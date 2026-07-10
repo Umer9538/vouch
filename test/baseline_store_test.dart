@@ -75,6 +75,18 @@ void main() {
     );
   });
 
+  test('invalid UTF-8 bytes throw BaselineFormatException, not a raw '
+      'FileSystemException', () {
+    // Audit round 2: readAsStringSync leaked FileSystemException on
+    // non-UTF-8 bytes instead of the documented exception type.
+    File(store.pathFor('binary'))
+        .writeAsBytesSync(const [0xFF, 0xFE, 0x00, 0x9C, 0x80]);
+    expect(
+      () => store.load('binary'),
+      throwsA(isA<BaselineFormatException>()),
+    );
+  });
+
   test('unparsable file content throws BaselineFormatException, '
       'not a raw FormatException', () {
     for (final content in [

@@ -14,6 +14,12 @@ void main() {
       Baseline.fromReport(reportOf(cases), model: gemma3,
           createdAt: DateTime.utc(2026, 7, 8));
 
+  CaseResult judgedCase(String name, double score) => CaseResult(
+    name: name,
+    output: 'same output',
+    results: [EvalResult(criterion: 'judge', passed: true, score: score)],
+  );
+
   group('classification', () {
     test('identical run is fully stable', () {
       final cases = [caseOf('a', 'out-a'), caseOf('b', 'out-b')];
@@ -82,6 +88,15 @@ void main() {
       final f = diff.stillFailing.single;
       expect(f.outputChanged, isTrue);
       expect(diff.hasRegressions, isFalse);
+    });
+
+    test('an unchanged known failure is stable, not a finding', () {
+      // Audit round 2: a byte-identical rerun of a baseline containing a
+      // failing case fabricated a stillFailing finding every time.
+      final cases = [caseOf('known-bad', 'nope', passed: false)];
+      final diff = compareToBaseline(baselineOf(cases), reportOf(cases));
+      expect(diff.findings, isEmpty);
+      expect(diff.stableCount, 1);
     });
 
     test('passing but with different output is drifted', () {
@@ -222,6 +237,42 @@ void main() {
       expect(d.currentScore, 0.9);
     });
 
+    test('an added case with a non-finite score stays JSON-encodable', () {
+      // Audit round 2: the added-case branch missed the isFinite guard, so
+      // an Infinity score leaked into toJson and jsonEncode crashed.
+      final diff = compareToBaseline(
+        baselineOf([]),
+        reportOf([
+          CaseResult(
+            name: 'fresh',
+            output: 'x',
+            results: [
+              const EvalResult(
+                criterion: 'j',
+                passed: false,
+                score: double.infinity,
+              ),
+            ],
+          ),
+        ]),
+      );
+      expect(diff.addedFailing.single.checkDeltas.single.currentScore, isNull);
+      expect(() => jsonEncode(diff.toJson()), returnsNormally);
+    });
+
+    test('a score delta overflowing to infinity is omitted from JSON', () {
+      // Audit round 2: two finite scores (±maxFinite) subtract to
+      // -Infinity, which JSON can't carry — jsonEncode crashed.
+      final diff = compareToBaseline(
+        baselineOf([judged('a', double.maxFinite)]),
+        reportOf([judged('a', -double.maxFinite)]),
+      );
+      final d = diff.drifted.single.checkDeltas.single;
+      expect(d.scoreDelta, double.negativeInfinity); // still visible in Dart
+      expect(d.toJson().containsKey('scoreDelta'), isFalse);
+      expect(() => jsonEncode(diff.toJson()), returnsNormally);
+    });
+
     test('a non-finite current score is treated as unscored and the '
         'agent payload stays JSON-encodable', () {
       final diff = compareToBaseline(
@@ -271,6 +322,72 @@ void main() {
       expect(d.baselineScore, 0.2);
       expect(d.currentScore, 0.9);
       expect(d.scoreDelta, closeTo(0.7, 1e-9));
+    });
+
+    test('reordering multiset-identical twins is stable, not drift', () {
+      // Audit round 2: positional pairing fabricated two mirror-image
+      // deltas (+0.7/-0.7) when identical twins swapped emission order.
+      final diff = compareToBaseline(
+        baselineOf([
+          CaseResult(name: 'c', output: 'x', results: twoLens(0.9, 0.2)),
+        ]),
+        reportOf([
+          CaseResult(name: 'c', output: 'x', results: twoLens(0.2, 0.9)),
+        ]),
+      );
+      expect(diff.findings, isEmpty);
+      expect(diff.stableCount, 1);
+    });
+
+    test('a deleted twin is reported as removed, not as its sibling '
+        'moving', () {
+      // Audit round 2: baseline [0.3, 0.9] vs current [0.9] claimed the
+      // surviving 0.9 check "moved 0.3 -> 0.9". The truthful story is that
+      // the 0.3 twin vanished.
+      final diff = compareToBaseline(
+        baselineOf([
+          CaseResult(name: 'c', output: 'x', results: twoLens(0.3, 0.9)),
+        ]),
+        reportOf([
+          CaseResult(
+            name: 'c',
+            output: 'x',
+            results: [
+              const EvalResult(criterion: 'len', passed: true, score: 0.9),
+            ],
+          ),
+        ]),
+      );
+      final d = diff.drifted.single.checkDeltas.single;
+      expect(d.baselineScore, 0.3);
+      expect(d.currentPassed, isNull); // one-sided: the twin is gone
+    });
+
+    test('a regressed twin is blamed correctly after reordering', () {
+      // Audit round 2: baseline [pass 0.9, pass 0.2] vs current
+      // [pass 0.2, FAIL 0.9] blamed the wrong twin ("PASS -> FAIL, score
+      // 0.20 -> 0.90"). The unchanged 0.2 twin must match away, leaving
+      // the 0.9 twin's flip with its own steady score.
+      final diff = compareToBaseline(
+        baselineOf([
+          CaseResult(name: 'c', output: 'x', results: twoLens(0.9, 0.2)),
+        ]),
+        reportOf([
+          CaseResult(
+            name: 'c',
+            output: 'x',
+            results: [
+              const EvalResult(criterion: 'len', passed: true, score: 0.2),
+              const EvalResult(criterion: 'len', passed: false, score: 0.9),
+            ],
+          ),
+        ]),
+      );
+      final d = diff.regressed.single.checkDeltas.single;
+      expect(d.baselinePassed, isTrue);
+      expect(d.currentPassed, isFalse);
+      expect(d.baselineScore, 0.9);
+      expect(d.currentScore, 0.9);
     });
 
     test('a duplicate count mismatch surfaces as a one-sided delta', () {
@@ -465,6 +582,22 @@ void main() {
   });
 
   group('summary', () {
+    test('a vanished score is named in the summary line', () {
+      // Audit round 2: presence-change drift rendered as an
+      // information-free "PASS → PASS" with no hint of why.
+      final diff = compareToBaseline(
+        baselineOf([judgedCase('a', 0.5)]),
+        reportOf([
+          CaseResult(
+            name: 'a',
+            output: 'same output',
+            results: [const EvalResult(criterion: 'judge', passed: true)],
+          ),
+        ]),
+      );
+      expect(diff.summary(), contains('(score 0.50 → none)'));
+    });
+
     test('truncation never splits an emoji surrogate pair', () {
       // Audit round 1: cutting at code unit 77 could strand a lone high
       // surrogate at the end of the snippet. Place an emoji exactly across
